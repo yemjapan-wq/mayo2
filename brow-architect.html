@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>似合う眉診断 | BROW ARCHITECT</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Noto+Serif+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:#080510;
+  font-family:'Noto Serif JP',serif;
+  color:#f0e6d3;
+  min-height:100vh;
+  display:flex;align-items:center;justify-content:center;
+  padding:20px 16px;
+}
+body::before{
+  content:'';position:fixed;inset:0;
+  background:radial-gradient(ellipse at 20% 20%,rgba(180,130,60,.07) 0%,transparent 50%),
+             radial-gradient(ellipse at 80% 80%,rgba(100,50,120,.08) 0%,transparent 50%);
+  pointer-events:none;
+}
+.wrap{width:100%;max-width:480px;position:relative;z-index:1}
+.card{
+  background:rgba(12,7,18,.92);
+  border:1px solid rgba(180,130,60,.22);
+  padding:36px 28px;position:relative;
+  backdrop-filter:blur(16px);
+  box-shadow:0 0 80px rgba(0,0,0,.9),inset 0 0 40px rgba(180,130,60,.025);
+}
+.card::before,.card::after{
+  content:'';position:absolute;width:18px;height:18px;
+  border-color:rgba(180,130,60,.55);border-style:solid;
+}
+.card::before{top:-1px;left:-1px;border-width:2px 0 0 2px}
+.card::after{bottom:-1px;right:-1px;border-width:0 2px 2px 0}
+.screen{display:none}.screen.active{display:block}
+
+/* typo */
+.orn{text-align:center;font-family:'Cinzel',serif;font-size:10px;letter-spacing:5px;color:rgba(180,130,60,.5);margin-bottom:10px}
+.ttl{font-family:'Cinzel',serif;font-size:12px;font-weight:600;letter-spacing:4px;color:rgba(180,130,60,.85);text-align:center;margin-bottom:6px}
+.jp{font-size:24px;font-weight:700;letter-spacing:4px;text-align:center;margin-bottom:6px}
+.sub{font-size:11px;letter-spacing:3px;color:rgba(180,130,60,.55);text-align:center;margin-bottom:28px}
+.body-t{font-size:13px;line-height:2.1;color:rgba(240,230,211,.65);text-align:center;margin-bottom:28px}
+.divl{height:1px;background:linear-gradient(90deg,transparent,rgba(180,130,60,.35),transparent);margin:22px 0}
+
+/* buttons */
+.btn{
+  width:100%;padding:15px;
+  background:linear-gradient(135deg,rgba(180,130,60,.12),rgba(180,130,60,.04));
+  border:1px solid rgba(180,130,60,.45);
+  color:rgba(180,130,60,.95);
+  font-family:'Noto Serif JP',serif;font-size:13px;letter-spacing:4px;
+  cursor:pointer;transition:all .3s;margin-bottom:10px;display:block;text-align:center;
+}
+.btn:hover{background:linear-gradient(135deg,rgba(180,130,60,.22),rgba(180,130,60,.08));border-color:rgba(180,130,60,.8)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-ghost{
+  width:100%;padding:10px;background:transparent;border:none;
+  color:rgba(240,230,211,.3);font-family:'Noto Serif JP',serif;
+  font-size:12px;letter-spacing:2px;cursor:pointer;transition:color .3s;
+}
+.btn-ghost:hover{color:rgba(240,230,211,.65)}
+
+/* upload */
+.up-area{
+  border:1px dashed rgba(180,130,60,.32);padding:32px 16px;
+  text-align:center;cursor:pointer;transition:all .3s;margin-bottom:20px;position:relative;
+}
+.up-area:hover{border-color:rgba(180,130,60,.7);background:rgba(180,130,60,.03)}
+.up-area input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.up-icon{font-size:32px;display:block;margin-bottom:10px}
+.up-txt{font-size:12px;color:rgba(240,230,211,.6);line-height:1.9;letter-spacing:1px}
+
+.pv-wrap{position:relative;margin-bottom:20px}
+#preview{width:100%;max-height:260px;object-fit:contain;display:block;border:1px solid rgba(180,130,60,.2)}
+#overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+
+/* loading */
+.ld-c{text-align:center;padding:20px 0}
+.ring-w{width:60px;height:60px;margin:0 auto 24px;position:relative}
+.ring{width:60px;height:60px;border:1px solid rgba(180,130,60,.15);border-top-color:rgba(180,130,60,.8);border-radius:50%;animation:spin 1.4s linear infinite}
+.ring-in{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ld-t{font-size:12px;letter-spacing:3px;color:rgba(180,130,60,.7);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+.ld-s{font-size:10px;letter-spacing:2px;color:rgba(240,230,211,.25);margin-top:10px}
+
+/* error */
+.err{background:rgba(180,40,40,.1);border:1px solid rgba(180,40,40,.3);padding:12px 16px;font-size:12px;color:rgba(240,140,140,.9);text-align:center;margin-bottom:16px;line-height:1.8}
+
+/* result */
+.face-badge-wrap{text-align:center;margin-bottom:20px}
+.face-shape-label{font-family:'Cinzel',serif;font-size:10px;letter-spacing:4px;color:rgba(180,130,60,.6);display:block;margin-bottom:8px}
+.face-shape-name{font-size:28px;font-weight:700;letter-spacing:4px;color:#f0e6d3;display:block;margin-bottom:4px}
+.face-shape-en{font-family:'Cinzel',serif;font-size:11px;letter-spacing:6px;color:rgba(180,130,60,.5)}
+
+.brow-rec{
+  background:linear-gradient(135deg,rgba(180,130,60,.1),rgba(180,130,60,.04));
+  border:1px solid rgba(180,130,60,.4);
+  padding:20px;margin-bottom:12px;text-align:center;
+}
+.brow-rec-label{font-family:'Cinzel',serif;font-size:9px;letter-spacing:4px;color:rgba(180,130,60,.6);margin-bottom:8px;display:block}
+.brow-rec-name{font-size:20px;font-weight:700;letter-spacing:3px;color:#f0e6d3;margin-bottom:4px;display:block}
+.brow-rec-en{font-family:'Cinzel',serif;font-size:10px;letter-spacing:4px;color:rgba(180,130,60,.55)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.sec{background:rgba(180,130,60,.035);border:1px solid rgba(180,130,60,.15);padding:14px 12px}
+.sec.full{grid-column:1/-1}
+.sec-ic{font-size:16px;display:block;margin-bottom:5px}
+.sec-lb{font-family:'Cinzel',serif;font-size:9px;letter-spacing:3px;color:rgba(180,130,60,.65);margin-bottom:7px;display:block}
+.sec-tx{font-size:12px;line-height:1.95;color:rgba(240,230,211,.72)}
+.sec-adv{font-size:11.5px;line-height:1.8;color:rgba(180,130,60,.78);margin-top:8px;padding-top:8px;border-top:1px solid rgba(180,130,60,.12)}
+
+/* step list */
+.steps{list-style:none;margin-top:8px}
+.steps li{
+  font-size:11.5px;line-height:1.9;color:rgba(240,230,211,.72);
+  padding:5px 0 5px 20px;position:relative;border-bottom:1px solid rgba(180,130,60,.07);
+}
+.steps li:last-child{border-bottom:none}
+.steps li::before{
+  content:attr(data-n);position:absolute;left:0;
+  font-family:'Cinzel',serif;font-size:9px;color:rgba(180,130,60,.7);top:6px;
+}
+
+/* face metrics */
+.metrics{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.metric{
+  padding:4px 10px;border:1px solid rgba(180,130,60,.25);
+  font-size:10px;letter-spacing:1px;color:rgba(240,230,211,.7);
+}
+.metric span{color:rgba(180,130,60,.85);margin-left:4px;font-weight:500}
+
+/* before/after visual guide */
+.guide-wrap{margin-bottom:12px;position:relative}
+.guide-label{font-family:'Cinzel',serif;font-size:9px;letter-spacing:3px;color:rgba(180,130,60,.6);text-align:center;margin-bottom:8px}
+#guide-canvas{width:100%;display:block;border:1px solid rgba(180,130,60,.15);background:rgba(0,0,0,.3)}
+
+.msg-box{
+  background:linear-gradient(135deg,rgba(180,130,60,.07),rgba(100,50,120,.04));
+  border:1px solid rgba(180,130,60,.28);padding:18px;text-align:center;
+}
+.msg-ic{font-size:18px;display:block;margin-bottom:8px}
+.msg-tx{font-size:12.5px;line-height:2.1;color:rgba(240,230,211,.82);font-style:italic}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+
+<!-- HOME -->
+<div class="screen active" id="s-home">
+  <div class="orn">✦ ✦ ✦</div>
+  <div class="ttl">BROW ARCHITECT</div>
+  <div class="jp">似合う眉診断</div>
+  <div class="sub">顔型スキャン × 最適眉提案</div>
+  <div class="divl"></div>
+  <div class="body-t">
+    顔全体をAIがスキャン。<br>
+    あなたの顔型を分析し、<br>
+    最も似合う眉の形を具体的に提案します。<br>
+    <span style="font-size:11px;color:rgba(180,130,60,.5)">写真はサーバーに送信されません</span>
+  </div>
+  <button class="btn" onclick="show('s-upload')">✦ 顔をスキャンする ✦</button>
+</div>
+
+<!-- UPLOAD -->
+<div class="screen" id="s-upload">
+  <div class="orn">📷 FACE SCAN</div>
+  <div class="jp" style="font-size:19px;margin-bottom:18px">顔写真をアップロード</div>
+  <div id="err" class="err" style="display:none"></div>
+  <div id="up-area" class="up-area">
+    <span class="up-icon">🔍</span>
+    <div class="up-txt">
+      正面・明るい場所の顔写真を選択<br>
+      <span style="color:rgba(180,130,60,.5);font-size:11px">前髪で眉が隠れていないものが最適</span>
+    </div>
+    <input type="file" accept="image/*" id="file-in" onchange="onFile(event)">
+  </div>
+  <div id="pv-wrap" class="pv-wrap" style="display:none">
+    <img id="preview" alt="preview">
+    <canvas id="overlay"></canvas>
+  </div>
+  <button class="btn" id="btn-scan" style="display:none" onclick="doScan()">✦ 顔型を分析する ✦</button>
+  <button class="btn-ghost" onclick="resetUp()">写真を変更する</button>
+  <button class="btn-ghost" onclick="show('s-home')">← 戻る</button>
+</div>
+
+<!-- LOADING -->
+<div class="screen" id="s-load">
+  <div class="ld-c">
+    <div class="ring-w"><div class="ring"></div><div class="ring-in">🔍</div></div>
+    <div class="orn" style="margin-bottom:6px">ANALYZING YOUR FACE</div>
+    <div class="ld-t" id="ld-msg">顔型を計測中...</div>
+    <div class="ld-s" id="ld-sub">輪郭 · 目の間隔 · 骨格バランス</div>
+  </div>
+</div>
+
+<!-- RESULT -->
+<div class="screen" id="s-result">
+
+  <!-- Face shape -->
+  <div class="face-badge-wrap">
+    <span class="face-shape-label">YOUR FACE SHAPE</span>
+    <span class="face-shape-name" id="r-fshape">—</span>
+    <span class="face-shape-en" id="r-fshape-en">—</span>
+  </div>
+
+  <!-- Face metrics -->
+  <div class="metrics" id="r-metrics"></div>
+
+  <div class="divl" style="margin:12px 0"></div>
+
+  <!-- Ideal brow -->
+  <div class="brow-rec">
+    <span class="brow-rec-label">RECOMMENDED BROW STYLE</span>
+    <span class="brow-rec-name" id="r-bname">—</span>
+    <span class="brow-rec-en" id="r-bname-en">—</span>
+  </div>
+
+  <!-- Visual guide -->
+  <div class="guide-wrap">
+    <div class="guide-label">IDEAL BROW GUIDE</div>
+    <canvas id="guide-canvas" width="420" height="160"></canvas>
+  </div>
+
+  <div class="grid2">
+    <!-- Why -->
+    <div class="sec full">
+      <span class="sec-ic">💡</span>
+      <span class="sec-lb">WHY · なぜこの眉が似合うのか</span>
+      <div class="sec-tx" id="r-why">—</div>
+    </div>
+    <!-- Current brow -->
+    <div class="sec full">
+      <span class="sec-ic">📐</span>
+      <span class="sec-lb">CURRENT · 今の眉の特徴</span>
+      <div class="sec-tx" id="r-current">—</div>
+    </div>
+    <!-- How to -->
+    <div class="sec full">
+      <span class="sec-ic">✏️</span>
+      <span class="sec-lb">HOW TO · 具体的な整え方</span>
+      <ol class="steps" id="r-steps"></ol>
+    </div>
+    <!-- NG -->
+    <div class="sec">
+      <span class="sec-ic">⚠️</span>
+      <span class="sec-lb">NG · 避けるべき眉</span>
+      <div class="sec-tx" id="r-ng">—</div>
+    </div>
+    <!-- Products -->
+    <div class="sec">
+      <span class="sec-ic">🪄</span>
+      <span class="sec-lb">TOOL · 必要なもの</span>
+      <div class="sec-tx" id="r-tool">—</div>
+    </div>
+  </div>
+
+  <div class="msg-box" style="margin-top:8px">
+    <span class="msg-ic">✨</span>
+    <div class="msg-tx" id="r-msg">—</div>
+  </div>
+  <div class="divl"></div>
+  <button class="btn" onclick="resetAll()">もう一度診断する</button>
+</div>
+
+</div></div>
+
+<script>
+// ── Utils ──
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
+function setErr(m){const e=document.getElementById('err');e.textContent=m;e.style.display=m?'block':'none'}
+function setLd(m,s){document.getElementById('ld-msg').textContent=m;if(s)document.getElementById('ld-sub').textContent=s}
+
+// ── MediaPipe ──
+let fm=null,fmReady=false;
+function initFM(){
+  return new Promise((res,rej)=>{
+    try{
+      fm=new FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+      fm.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
+      fm.onResults(()=>{});
+      fm.initialize().then(()=>{fmReady=true;res()}).catch(rej);
+    }catch(e){rej(e)}
+  });
+}
+function detect(img){
+  return new Promise((res,rej)=>{
+    const t=setTimeout(()=>rej(new Error('タイムアウト。明るい写真でお試しください。')),18000);
+    fm.onResults(r=>{
+      clearTimeout(t);
+      if(r.multiFaceLandmarks&&r.multiFaceLandmarks.length>0) res(r.multiFaceLandmarks[0]);
+      else rej(new Error('顔が検出できませんでした。正面・明るい写真をお試しください。'));
+    });
+    fm.send({image:img}).catch(rej);
+  });
+}
+
+// ── File Handling ──
+let curImg=null;
+function onFile(e){
+  const f=e.target.files[0];if(!f)return;setErr('');
+  const r=new FileReader();
+  r.onload=ev=>{
+    const img=new Image();
+    img.onload=()=>{
+      curImg=img;
+      document.getElementById('preview').src=ev.target.result;
+      document.getElementById('pv-wrap').style.display='block';
+      document.getElementById('up-area').style.display='none';
+      document.getElementById('btn-scan').style.display='block';
+      const c=document.getElementById('overlay');c.width=0;c.height=0;
+    };
+    img.src=ev.target.result;
+  };
+  r.readAsDataURL(f);
+}
+function resetUp(){
+  curImg=null;
+  document.getElementById('pv-wrap').style.display='none';
+  document.getElementById('up-area').style.display='block';
+  document.getElementById('btn-scan').style.display='none';
+  document.getElementById('file-in').value='';
+  setErr('');
+}
+function resetAll(){resetUp();show('s-home')}
+
+// ── Main Analysis ──
+async function doScan(){
+  if(!curImg)return;setErr('');show('s-load');
+  setLd('顔認識モデルを準備中...','少々お待ちください');
+  try{
+    if(!fmReady)await initFM();
+    setLd('顔のランドマークを検出中...','468点のポイントを計測');
+    const lm=await detect(curImg);
+    setLd('顔型を分析中...','輪郭 · 比率 · バランスを計算');
+    drawFaceOverlay(lm);
+    const face=measureFace(lm);
+    const brows=measureBrows(lm);
+    const faceType=classifyFace(face);
+    const result=buildResult(faceType,face,brows);
+    renderResult(result,face,brows);
+    show('s-result');
+  }catch(err){
+    show('s-upload');setErr(err.message||'エラーが発生しました。');
+  }
+}
+
+// ── Landmark Helpers ──
+function pt(lm,i){return{x:lm[i].x,y:lm[i].y}}
+function dist(a,b){return Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2)}
+
+// ── Face Overlay ──
+const FACE_OUTLINE=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10];
+const L_BROW_U=[70,63,105,66,107],L_BROW_L=[46,53,52,65,55];
+const R_BROW_U=[300,293,334,296,336],R_BROW_L=[276,283,282,295,285];
+
+function drawFaceOverlay(lm){
+  const img=document.getElementById('preview');
+  const c=document.getElementById('overlay');
+  const w=img.clientWidth||img.naturalWidth;
+  const h=img.clientHeight||img.naturalHeight;
+  c.width=w;c.height=h;
+  const ctx=c.getContext('2d');ctx.clearRect(0,0,w,h);
+
+  // Face outline
+  ctx.beginPath();
+  FACE_OUTLINE.forEach((i,n)=>{
+    const p=pt(lm,i);
+    if(n===0)ctx.moveTo(p.x*w,p.y*h);else ctx.lineTo(p.x*w,p.y*h);
+  });
+  ctx.closePath();
+  ctx.strokeStyle='rgba(180,130,60,0.5)';ctx.lineWidth=1.5;ctx.stroke();
+
+  // Brow dots
+  [...L_BROW_U,...L_BROW_L,...R_BROW_U,...R_BROW_L].forEach(i=>{
+    const p=pt(lm,i);
+    ctx.beginPath();ctx.arc(p.x*w,p.y*h,2.5,0,Math.PI*2);
+    ctx.fillStyle='rgba(150,200,255,0.8)';ctx.fill();
+  });
+
+  // Brow lines
+  [L_BROW_U,R_BROW_U].forEach(grp=>{
+    ctx.beginPath();
+    grp.forEach((i,n)=>{const p=pt(lm,i);if(n===0)ctx.moveTo(p.x*w,p.y*h);else ctx.lineTo(p.x*w,p.y*h)});
+    ctx.strokeStyle='rgba(180,130,60,0.8)';ctx.lineWidth=2;ctx.stroke();
+  });
+
+  // Key points labels
+  const keyPts=[{i:152,l:'顎'},{i:10,l:'額'},{i:234,l:'頬'},{i:454,l:'頬'}];
+  keyPts.forEach(({i,l})=>{
+    const p=pt(lm,i);
+    ctx.fillStyle='rgba(180,130,60,0.7)';ctx.font='10px sans-serif';
+    ctx.fillText(l,p.x*w+4,p.y*h-4);
+    ctx.beginPath();ctx.arc(p.x*w,p.y*h,3,0,Math.PI*2);
+    ctx.fillStyle='rgba(180,210,100,0.9)';ctx.fill();
+  });
+}
+
+// ── Measure Face ──
+function measureFace(lm){
+  const chin=pt(lm,152),fore=pt(lm,10);
+  const lCheek=pt(lm,234),rCheek=pt(lm,454);
+  const lJaw=pt(lm,172),rJaw=pt(lm,397);
+  const lFore=pt(lm,54),rFore=pt(lm,284);
+  const lEyeIn=pt(lm,133),rEyeIn=pt(lm,362);
+  const lEyeOut=pt(lm,33),rEyeOut=pt(lm,263);
+
+  const faceH=dist(chin,fore);
+  const cheekW=dist(lCheek,rCheek);
+  const jawW=dist(lJaw,rJaw);
+  const foreW=dist(lFore,rFore);
+  const eyeGap=dist(lEyeIn,rEyeIn);
+  const eyeSpan=dist(lEyeOut,rEyeOut);
+  const eyeW=(dist(lEyeOut,lEyeIn)+dist(rEyeOut,rEyeIn))/2;
+
+  return{
+    faceH,cheekW,jawW,foreW,eyeGap,eyeSpan,eyeW,
+    whRatio:cheekW/faceH,
+    jawForeRatio:jawW/foreW,
+    cheekJawRatio:cheekW/jawW,
+    cheekForeRatio:cheekW/foreW,
+    eyeGapRatio:eyeGap/cheekW,
+    raw:{chin,fore,lCheek,rCheek,lJaw,rJaw,lFore,rFore,lEyeIn,rEyeIn}
+  };
+}
+
+// ── Measure Brows ──
+function measureBrows(lm){
+  // Left brow arch
+  const li=pt(lm,55),lo=pt(lm,107),lp=pt(lm,105);
+  const lt=(lp.x-li.x)/((lo.x-li.x)||.001);
+  const lBase=li.y+lt*(lo.y-li.y);
+  const lArch=lBase-lp.y;
+  const lAngle=Math.atan2(lo.y-li.y,Math.abs(lo.x-li.x))*180/Math.PI;
+  const lThick=(dist(pt(lm,70),pt(lm,46))+dist(pt(lm,105),pt(lm,52)))/2;
+
+  const ri=pt(lm,285),ro=pt(lm,336),rp=pt(lm,334);
+  const rt=(rp.x-ri.x)/((ro.x-ri.x)||.001);
+  const rBase=ri.y+rt*(ro.y-ri.y);
+  const rArch=rBase-rp.y;
+  const rAngle=Math.atan2(ro.y-ri.y,Math.abs(ro.x-ri.x))*180/Math.PI;
+  const rThick=(dist(pt(lm,300),pt(lm,276))+dist(pt(lm,334),pt(lm,282)))/2;
+
+  const archN=((lArch+rArch)/2)/((dist(pt(lm,234),pt(lm,454)))||.001);
+  const thickN=((lThick+rThick)/2)/((dist(pt(lm,234),pt(lm,454)))||.001);
+  const angleD=(lAngle+rAngle)/2;
+
+  return{archN,thickN,angleD,
+    archLabel:archN>0.022?'高め':archN>0.01?'普通':'低め・フラット',
+    thickLabel:thickN>0.025?'太め':thickN>0.016?'普通':'細め',
+    angleLabel:angleD<-4?'上がり気味':angleD>4?'下がり気味':'水平に近い',
+  };
+}
+
+// ── Classify Face Shape ──
+function classifyFace(f){
+  const{whRatio,jawForeRatio,cheekJawRatio,cheekForeRatio}=f;
+  // Scoring approach
+  const s={oval:0,round:0,square:0,heart:0,diamond:0,oblong:0};
+
+  // Width/Height ratio
+  if(whRatio<0.58)s.oblong+=4;
+  else if(whRatio<0.68){s.oval+=3;s.oblong+=1;}
+  else if(whRatio<0.80){s.oval+=2;s.square+=1;s.round+=1;}
+  else{s.round+=3;s.square+=2;}
+
+  // Jaw vs Forehead
+  if(jawForeRatio<0.78){s.heart+=4;}
+  else if(jawForeRatio<0.88){s.heart+=2;s.oval+=1;}
+  else if(jawForeRatio<1.05){s.oval+=2;s.square+=1;}
+  else{s.square+=2;}
+
+  // Cheek vs Jaw
+  if(cheekJawRatio>1.25){s.diamond+=3;s.oval+=1;}
+  else if(cheekJawRatio>1.12){s.oval+=2;}
+  else{s.square+=2;s.round+=1;}
+
+  // Cheek vs Forehead
+  if(cheekForeRatio>1.15&&jawForeRatio<0.85){s.diamond+=3;}
+  else if(cheekForeRatio<0.95){s.heart+=1;}
+
+  return Object.entries(s).sort((a,b)=>b[1]-a[1])[0][0];
+}
+
+// ── Diagnosis Data ──
+const DATA={
+  oval:{
+    name:'卵型',en:'OVAL',
+    desc:'縦横比・輪郭のバランスが最も整った顔型。',
+    idealBrow:'ナチュラルアーチ眉',idealBrowEn:'NATURAL ARCH',
+    why:'卵型は顔のバランス自体が整っているため、過度な主張より自然なアーチが顔立ちを最も引き立てます。眉が主役になりすぎず、目鼻立ちとの調和が生まれます。',
+    currentNote:'ほぼどの眉型でも似合いますが、今より少し整えるだけで洗練度が格段に上がります。',
+    steps:['眉頭はぼかし気味に（パウダーを薄く乗せる程度）','眉山は黒目の外側のラインの延長上に設定','眉尻は小鼻と目尻を結んだ線の延長上で終わらせる','眉の下ラインを整え、上ラインは自然な毛流れを活かす','全体の太さは中間（太すぎず細すぎず）に保つ'],
+    ng:'直線的すぎる一文字眉（輪郭の特徴が消えてしまう）',
+    tool:'眉パウダー（2色）、眉マスカラ、細い眉ブラシ',
+    msg:'バランスの良い卵型はどの眉型でも似合う優れた顔型。でも「似合う」と「最も引き立つ」は違います。今より少し整えるだけで、次のステージへ。',
+    guide:{type:'arch',archH:0.45,peakPos:0.6,thick:0.18}
+  },
+  round:{
+    name:'丸顔',en:'ROUND',
+    desc:'顔の縦横比が近く、輪郭が丸みを帯びた柔らかい顔型。',
+    idealBrow:'高アーチ眉',idealBrowEn:'HIGH ARCH',
+    why:'丸顔は縦の長さを視覚的に補うことで小顔効果が生まれます。眉山を高くすることで顔の縦ラインが強調され、すっきりと面長に見える効果があります。',
+    currentNote:'現在の眉山が低い場合、眉山を少し上げるだけで劇的な変化が生まれます。',
+    steps:['眉山の位置を通常より少し高めに設定（黒目外側の真上あたり）','眉山に向けてシャープなラインを意識して描く','眉頭は低め・眉山は高め、の高低差を出すことが鍵','眉尻は少し上げ気味で締める（下げすぎない）','太さは中〜やや太めで存在感を出す'],
+    ng:'丸いアーチ眉（顔の丸みがさらに強調されてしまう）',
+    tool:'眉ペン（細芯）、ハイライトペン（眉下に入れると効果的）、眉パウダー',
+    msg:'丸顔の柔らかさは魅力。眉一本で縦ラインを作るだけで、その魅力はさらに際立ちます。',
+    guide:{type:'high-arch',archH:0.65,peakPos:0.62,thick:0.2}
+  },
+  square:{
+    name:'四角顔',en:'SQUARE',
+    desc:'顎のライン・頬骨・額の幅がほぼ同じで、輪郭に直線的な印象がある顔型。',
+    idealBrow:'ソフトカーブ眉',idealBrowEn:'SOFT CURVE',
+    why:'四角顔はエラのシャープさが特徴的。緩やかなカーブ眉にすることで輪郭の直線的な印象が和らぎ、全体的に柔らかく女性らしい印象になります。',
+    currentNote:'直線的・角張った眉は顔の骨格の直線をさらに強調します。カーブを意識した眉に変えると顔の印象が大きく変わります。',
+    steps:['角のある山型ではなく、緩やかな弧を描くイメージで','眉山をはっきり作りすぎない（滑らかに繋げる）','眉頭〜眉尻まで流れるようなカーブラインを意識','太さは中程度（細すぎると骨格がより目立つ）','眉尻は自然に終わらせる（上げすぎ・下げすぎどちらもNG）'],
+    ng:'直線一文字眉・角ばった山型眉（エラが強調されすぎる）',
+    tool:'眉パウダー（ぼかしやすい）、スクリューブラシ（毛流れを整える）',
+    msg:'四角顔の持つ意志の強さはそのままに。眉を丸めることで、強さの中に優しさが宿ります。',
+    guide:{type:'soft-curve',archH:0.38,peakPos:0.58,thick:0.19}
+  },
+  heart:{
+    name:'逆三角形',en:'HEART',
+    desc:'額が広く、顎が細くシャープな顔型。',
+    idealBrow:'緩やかロウアーチ眉',idealBrowEn:'LOW ARCH',
+    why:'逆三角形は額の広さが目立ちやすいのが特徴。眉を低めのアーチにすることで顔の重心が下がり、バランスが整います。眉を濃くしすぎないことが重要です。',
+    currentNote:'眉山が高すぎたり、眉が濃すぎると額の広さがさらに目立ちます。',
+    steps:['眉山を低め・緩やかに設定（黒目の延長線上あたり）','眉頭はぼかして自然なグラデーションに','眉尻は細くフェードアウトさせる','全体的に薄め・細めの眉が◎','アーチをゆるやかにして直線的にならないよう注意'],
+    ng:'高いアーチ眉・太く濃い眉（額の広さが強調される）',
+    tool:'眉パウダー（薄づきタイプ）、眉マスカラ（明るめカラー）',
+    msg:'シャープな顎ラインはあなたの最大の武器。眉を主役にしすぎず、顎のラインを活かすことで、全体が洗練されます。',
+    guide:{type:'low-arch',archH:0.28,peakPos:0.56,thick:0.15}
+  },
+  diamond:{
+    name:'ひし形',en:'DIAMOND',
+    desc:'頬骨が最も広く、額・顎の両方が細い顔型。',
+    idealBrow:'カーブ眉',idealBrowEn:'CURVED',
+    why:'ひし形顔は頬骨の横幅が目立つため、眉に横幅を持たせることで額の視覚的な広さが補われ、顔全体のバランスが整います。',
+    currentNote:'細すぎる眉や短い眉は頬骨の横幅をさらに強調してしまいます。',
+    steps:['眉を少し長めに描く（目尻より少し長め）','緩やかなアーチで横幅を意識','眉頭は自然なグラデーション（急に濃くしない）','眉山はなだらかに、急角度は避ける','眉の太さは中程度〜やや太めがバランス◎'],
+    ng:'短い眉・細すぎる眉（頬骨が強調される）',
+    tool:'眉ペン（横幅を出すため）、眉パウダー、テンプレート使用も効果的',
+    msg:'ひし形顔の高い頬骨は立体的で魅力的。眉に長さを加えることで、その骨格が洗練された印象に変わります。',
+    guide:{type:'curved',archH:0.42,peakPos:0.6,thick:0.18}
+  },
+  oblong:{
+    name:'面長',en:'OBLONG',
+    desc:'顔の縦の長さが横に比べて長い顔型。',
+    idealBrow:'フラット眉',idealBrowEn:'FLAT',
+    why:'面長は縦の長さを視覚的に短くすることで小顔効果が生まれます。水平に近いフラット眉は横のラインを強調し、顔の縦長感をバランスよく補正します。',
+    currentNote:'アーチが高い眉や眉山が急な眉は縦のラインをさらに強調してしまいます。',
+    steps:['眉のアーチはほぼ水平〜ごくわずかなカーブに抑える','眉を少し太めに（横幅の存在感を出す）','眉頭から眉尻まで高低差を最小限に','眉の長さは十分に確保（短くしない）','眉頭はしっかり描く（印象の横幅を出す）'],
+    ng:'高いアーチ眉・細眉（面長がさらに強調される）',
+    tool:'眉パウダー（太めに整えやすい）、ワイドカットのコーム付き眉ハサミ',
+    msg:'面長の知的で品のある印象はそのままに。水平な眉一本で、顔全体のバランスが整います。',
+    guide:{type:'flat',archH:0.18,peakPos:0.55,thick:0.22}
+  }
+};
+
+// ── Build Result ──
+function buildResult(faceType,face,brows){
+  const d=DATA[faceType];
+  let currentDesc=`アーチ：${brows.archLabel} / 太さ：${brows.thickLabel} / 角度：${brows.angleLabel}。`;
+  if(brows.archN>0.025)currentDesc+='眉山がはっきりしたアーチ眉です。';
+  else if(brows.archN<0.01)currentDesc+='比較的フラットな眉です。';
+  else currentDesc+='中程度のカーブがあります。';
+  return{...d,faceType,face,brows,currentDesc};
+}
+
+// ── Render Result ──
+function renderResult(r,face,brows){
+  document.getElementById('r-fshape').textContent=r.name;
+  document.getElementById('r-fshape-en').textContent=r.en;
+  document.getElementById('r-bname').textContent=r.idealBrow;
+  document.getElementById('r-bname-en').textContent=r.idealBrowEn;
+  document.getElementById('r-why').textContent=r.why;
+  document.getElementById('r-current').textContent=r.currentDesc;
+  document.getElementById('r-ng').textContent=r.ng;
+  document.getElementById('r-tool').textContent=r.tool;
+  document.getElementById('r-msg').textContent=r.msg;
+
+  // Steps
+  const sl=document.getElementById('r-steps');
+  sl.innerHTML=r.steps.map((s,i)=>`<li data-n="${i+1}">${s}</li>`).join('');
+
+  // Metrics
+  const mEl=document.getElementById('r-metrics');
+  const ratio=(face.cheekW/face.faceH).toFixed(2);
+  const jfr=(face.jawW/face.foreW).toFixed(2);
+  mEl.innerHTML=[
+    {l:'縦横比',v:ratio},
+    {l:'顎/額',v:jfr},
+    {l:'眉アーチ',v:brows.archLabel},
+    {l:'眉の角度',v:brows.angleLabel},
+  ].map(({l,v})=>`<div class="metric">${l}<span>${v}</span></div>`).join('');
+
+  // Draw ideal brow guide
+  drawIdealBrow(r.guide,r.faceType);
+}
+
+// ── Draw Ideal Brow Guide ──
+function drawIdealBrow(g,faceType){
+  const c=document.getElementById('guide-canvas');
+  const ctx=c.getContext('2d');
+  const W=c.width,H=c.height;
+  ctx.clearRect(0,0,W,H);
+
+  // Background
+  ctx.fillStyle='rgba(8,5,16,0.95)';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(180,130,60,0.08)';ctx.lineWidth=1;
+  // grid lines
+  for(let i=0;i<W;i+=40){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,H);ctx.stroke()}
+  for(let j=0;j<H;j+=40){ctx.beginPath();ctx.moveTo(0,j);ctx.lineTo(W,j);ctx.stroke()}
+
+  // Face silhouette (simple oval)
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(W/2,H*0.55,W*0.22,H*0.42,0,0,Math.PI*2);
+  ctx.strokeStyle='rgba(180,130,60,0.2)';ctx.lineWidth=1;ctx.stroke();
+  ctx.restore();
+
+  // Draw both brows
+  [-1,1].forEach(side=>{
+    drawSingleIdealBrow(ctx,W,H,side,g);
+  });
+
+  // Labels
+  ctx.font='11px Cinzel,serif';ctx.fillStyle='rgba(180,130,60,0.7)';ctx.textAlign='center';
+  ctx.fillText('IDEAL BROW SHAPE',W/2,H-12);
+
+  // Face type label top left
+  ctx.font='10px sans-serif';ctx.fillStyle='rgba(240,230,211,0.3)';ctx.textAlign='left';
+  ctx.fillText(DATA[faceType]?.name||'',12,20);
+}
+
+function drawSingleIdealBrow(ctx,W,H,side,g){
+  // side: -1=left, 1=right
+  const cx=W/2;
+  const bW=W*0.27; // brow width
+  const bH=H*g.thick; // brow thickness
+  const baseY=H*0.32;
+  const archH=H*g.archH*0.25;
+  const offsetX=side*(W*0.14+bW/2);
+  const startX=cx+offsetX-side*bW/2;
+  const endX=cx+offsetX+side*bW/2;
+  const peakX=startX+side*(bW*g.peakPos);
+  const peakY=baseY-archH;
+
+  // Brow fill (gradient)
+  const grad=ctx.createLinearGradient(startX,0,endX,0);
+  grad.addColorStop(0,'rgba(180,130,60,0.1)');
+  grad.addColorStop(0.3,'rgba(180,130,60,0.6)');
+  grad.addColorStop(0.7,'rgba(180,130,60,0.7)');
+  grad.addColorStop(1,'rgba(180,130,60,0.1)');
+
+  // Upper path
+  ctx.beginPath();
+  ctx.moveTo(startX,baseY);
+  ctx.quadraticCurveTo(peakX,peakY-bH/2,endX,baseY+(g.type==='high-arch'?-5:0));
+  // Lower path (reverse)
+  ctx.quadraticCurveTo(peakX,peakY+bH/2,startX,baseY);
+  ctx.closePath();
+  ctx.fillStyle=grad;ctx.fill();
+
+  // Upper line (main shape guide)
+  ctx.beginPath();
+  ctx.moveTo(startX,baseY);
+  ctx.quadraticCurveTo(peakX,peakY,endX,baseY+(g.type==='high-arch'?-6:g.type==='flat'?2:0));
+  ctx.strokeStyle='rgba(180,130,60,0.9)';ctx.lineWidth=2;ctx.stroke();
+
+  // Peak marker
+  ctx.beginPath();ctx.arc(peakX,peakY,3,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,220,100,0.8)';ctx.fill();
+
+  // Dimension lines (subtle)
+  ctx.setLineDash([3,4]);ctx.strokeStyle='rgba(180,130,60,0.2)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(peakX,peakY-8);ctx.lineTo(peakX,peakY-20);ctx.stroke();
+  ctx.setLineDash([]);
+}
+</script>
+</body>
+</html>
