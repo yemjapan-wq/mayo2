@@ -403,28 +403,36 @@ function drawFaceOverlay(lm){
 
 // ── Measure Face ──
 function measureFace(lm){
-  const chin=pt(lm,152),fore=pt(lm,10);
-  const lCheek=pt(lm,234),rCheek=pt(lm,454);
-  const lJaw=pt(lm,172),rJaw=pt(lm,397);
-  const lFore=pt(lm,54),rFore=pt(lm,284);
-  const lEyeIn=pt(lm,133),rEyeIn=pt(lm,362);
-  const lEyeOut=pt(lm,33),rEyeOut=pt(lm,263);
+  // 顔の高さ: 顎先(152) → 額中央(10)
+  const chin=pt(lm,152), fore=pt(lm,10);
+  // 頬骨幅: 左右の頬の外側(234, 454)
+  const lCheek=pt(lm,234), rCheek=pt(lm,454);
+  // 顎幅: 下顎の左右(172, 397)
+  const lJaw=pt(lm,172), rJaw=pt(lm,397);
+  // 額幅: こめかみ付近(127, 356) ← より額の横幅を拾いやすい
+  const lFore=pt(lm,127), rFore=pt(lm,356);
+  // 目の内側・外側
+  const lEyeIn=pt(lm,133), rEyeIn=pt(lm,362);
+  const lEyeOut=pt(lm,33), rEyeOut=pt(lm,263);
+  // 顔の中間幅（頬骨より少し下、最広部の推定）
+  const lMid=pt(lm,116), rMid=pt(lm,345);
 
   const faceH=dist(chin,fore);
   const cheekW=dist(lCheek,rCheek);
   const jawW=dist(lJaw,rJaw);
   const foreW=dist(lFore,rFore);
+  const midW=dist(lMid,rMid);
   const eyeGap=dist(lEyeIn,rEyeIn);
   const eyeSpan=dist(lEyeOut,rEyeOut);
-  const eyeW=(dist(lEyeOut,lEyeIn)+dist(rEyeOut,rEyeIn))/2;
+
+  const whRatio=cheekW/faceH;
+  const jawForeRatio=jawW/foreW;
+  const cheekJawRatio=cheekW/jawW;
+  const cheekForeRatio=cheekW/foreW;
 
   return{
-    faceH,cheekW,jawW,foreW,eyeGap,eyeSpan,eyeW,
-    whRatio:cheekW/faceH,
-    jawForeRatio:jawW/foreW,
-    cheekJawRatio:cheekW/jawW,
-    cheekForeRatio:cheekW/foreW,
-    eyeGapRatio:eyeGap/cheekW,
+    faceH,cheekW,jawW,foreW,midW,eyeGap,eyeSpan,
+    whRatio,jawForeRatio,cheekJawRatio,cheekForeRatio,
     raw:{chin,fore,lCheek,rCheek,lJaw,rJaw,lFore,rFore,lEyeIn,rEyeIn}
   };
 }
@@ -457,34 +465,35 @@ function measureBrows(lm){
   };
 }
 
-// ── Classify Face Shape ──
+// ── Classify Face Shape（決定木方式）──
 function classifyFace(f){
   const{whRatio,jawForeRatio,cheekJawRatio,cheekForeRatio}=f;
-  // Scoring approach
-  const s={oval:0,round:0,square:0,heart:0,diamond:0,oblong:0};
 
-  // Width/Height ratio
-  if(whRatio<0.58)s.oblong+=4;
-  else if(whRatio<0.68){s.oval+=3;s.oblong+=1;}
-  else if(whRatio<0.80){s.oval+=2;s.square+=1;s.round+=1;}
-  else{s.round+=3;s.square+=2;}
+  // デバッグ用にコンソール出力
+  console.log('Face metrics:',{
+    whRatio:whRatio.toFixed(3),
+    jawForeRatio:jawForeRatio.toFixed(3),
+    cheekJawRatio:cheekJawRatio.toFixed(3),
+    cheekForeRatio:cheekForeRatio.toFixed(3)
+  });
 
-  // Jaw vs Forehead
-  if(jawForeRatio<0.78){s.heart+=4;}
-  else if(jawForeRatio<0.88){s.heart+=2;s.oval+=1;}
-  else if(jawForeRatio<1.05){s.oval+=2;s.square+=1;}
-  else{s.square+=2;}
+  // ① 面長：縦が明らかに長い
+  if(whRatio < 0.64) return 'oblong';
 
-  // Cheek vs Jaw
-  if(cheekJawRatio>1.25){s.diamond+=3;s.oval+=1;}
-  else if(cheekJawRatio>1.12){s.oval+=2;}
-  else{s.square+=2;s.round+=1;}
+  // ② 丸顔：横幅が縦に近い（丸っこい）
+  if(whRatio > 0.78) return 'round';
 
-  // Cheek vs Forehead
-  if(cheekForeRatio>1.15&&jawForeRatio<0.85){s.diamond+=3;}
-  else if(cheekForeRatio<0.95){s.heart+=1;}
+  // ③ ハート・逆三角：額が顎より明らかに広い
+  if(jawForeRatio < 0.84) return 'heart';
 
-  return Object.entries(s).sort((a,b)=>b[1]-a[1])[0][0];
+  // ④ 四角：顎幅が額幅に近く、頬骨もほぼ同幅
+  if(jawForeRatio > 0.93 && cheekJawRatio < 1.20) return 'square';
+
+  // ⑤ ひし形：頬骨が額・顎両方より明らかに広い
+  if(cheekForeRatio > 1.10 && cheekJawRatio > 1.18) return 'diamond';
+
+  // ⑥ 卵型：上記に当てはまらないバランス型
+  return 'oval';
 }
 
 // ── Diagnosis Data ──
@@ -589,13 +598,12 @@ function renderResult(r,face,brows){
   const sl=document.getElementById('r-steps');
   sl.innerHTML=r.steps.map((s,i)=>`<li data-n="${i+1}">${s}</li>`).join('');
 
-  // Metrics
+  // Metrics（実測値を表示してデバッグ可能に）
   const mEl=document.getElementById('r-metrics');
-  const ratio=(face.cheekW/face.faceH).toFixed(2);
-  const jfr=(face.jawW/face.foreW).toFixed(2);
   mEl.innerHTML=[
-    {l:'縦横比',v:ratio},
-    {l:'顎/額',v:jfr},
+    {l:'縦横比',v:face.whRatio.toFixed(2)},
+    {l:'顎/額',v:face.jawForeRatio.toFixed(2)},
+    {l:'頬/顎',v:face.cheekJawRatio.toFixed(2)},
     {l:'眉アーチ',v:brows.archLabel},
     {l:'眉の角度',v:brows.angleLabel},
   ].map(({l,v})=>`<div class="metric">${l}<span>${v}</span></div>`).join('');
